@@ -1,12 +1,13 @@
 // ==UserScript==
 // @name         中正大學單一入口與成績查詢自動化
 // @namespace    1
-// @version      1.3
-// @description  支援單一入口、CAS 與 KIKI 成績查詢頁面
+// @version      1.5
+// @description  支援單一入口、CAS、KIKI 與各項子系統 (如校際選課) 自動跳轉登入
 // @author       Andy
 // @match        https://cas.ccu.edu.tw/login*
 // @match        https://portal.ccu.edu.tw/*
 // @match        https://kiki.ccu.edu.tw/*
+// @match        https://www026220.ccu.edu.tw/*
 // @grant        none
 // @run-at       document-idle
 // ==/UserScript==
@@ -21,16 +22,30 @@
         AUTO_LOGIN: true,         // 是否自動點擊登入
         START_DELAY: 500,         // 進入頁面後多久開始填寫
         SUBMIT_DELAY: 1000,       // 填寫完成後多久點擊登入
-        POLLING_INTERVAL: 1000    // 檢查欄位頻率
+        POLLING_INTERVAL: 800     // 檢查欄位頻率
     };
 
-    // 1. 處理 Portal 入口頁面
-    if (window.location.hostname === 'portal.ccu.edu.tw') {
-        const loginBtn = document.querySelector('.signin-btn a');
-        if (loginBtn) {
-            loginBtn.click();
+    // 1. 處理各類頁面的自動跳轉點擊
+    function checkAutoJump() {
+        // A. 處理 Portal 入口
+        if (window.location.hostname === 'portal.ccu.edu.tw') {
+            const loginBtn = document.querySelector('.signin-btn a');
+            if (loginBtn) {
+                loginBtn.click();
+                return true;
+            }
         }
-        return;
+
+        // B. 處理您提供的網址 (www026220.ccu.edu.tw) 
+        // 點擊「校內教職員生登入」按鈕
+        const schoolStaffBtn = document.querySelector('a[href*="casLogin"]');
+        if (schoolStaffBtn) {
+            console.log("偵測到校內教職員生登入按鈕，自動跳轉...");
+            schoolStaffBtn.click();
+            return true;
+        }
+        
+        return false;
     }
 
     // 強制填寫函數
@@ -44,6 +59,9 @@
     }
 
     function startProcess() {
+        // 先檢查是否需要跳轉點擊
+        if (checkAutoJump()) return;
+
         let attempts = 0;
         const maxAttempts = 10;
 
@@ -51,13 +69,12 @@
             let userField, passField, submitBtn;
 
             // --- 判斷頁面類型並抓取欄位 ---
-            if (window.location.href.includes('kiki.ccu.edu.tw')) {
-                // 成績查詢頁面使用 name 屬性
+            const url = window.location.href;
+            if (url.includes('kiki.ccu.edu.tw')) {
                 userField = document.querySelector('input[name="id"]');
                 passField = document.querySelector('input[name="password"]');
                 submitBtn = document.querySelector('input[type="submit"]');
-            } else {
-                // 一般 CAS 登入頁面使用 id 屬性
+            } else if (url.includes('cas.ccu.edu.tw')) {
                 userField = document.getElementById('username');
                 passField = document.getElementById('password');
                 submitBtn = document.querySelector('button[name="submitBtn"]');
@@ -65,8 +82,9 @@
 
             // --- 執行填寫 ---
             if (userField && passField) {
-                const userDone = forceFill(userField, CONFIG.username);
-                const passDone = forceFill(passField, CONFIG.password);
+                // 如果已經填寫過且內容正確，就準備點擊
+                const userDone = (userField.value === CONFIG.username) || forceFill(userField, CONFIG.username);
+                const passDone = (passField.value === CONFIG.password) || forceFill(passField, CONFIG.password);
 
                 if (userDone && passDone) {
                     clearInterval(timer);
@@ -84,6 +102,6 @@
             attempts++;
         }, CONFIG.POLLING_INTERVAL);
     }
-
+    
     setTimeout(startProcess, CONFIG.START_DELAY);
 })();
